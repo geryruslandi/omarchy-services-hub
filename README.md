@@ -67,25 +67,27 @@ ask for confirmation before they are stopped or restarted.
 ## System services and polkit
 
 Reading status, RAM/VRAM, logs and the enable state of system services needs
-no privileges. **Changing** them (start/stop/restart/enable/disable) needs
-root, which the plugin requests with `pkexec`:
+no privileges. **Changing** them (start/stop/restart/enable/disable) asks
+systemd over D-Bus, where polkit decides:
 
-- **Without a whitelist**: every action opens the polkit password dialog.
+- **Without a whitelist**: systemd's default policy (`auth_admin_keep`) opens
+  the polkit password dialog; one successful authentication is remembered for
+  a while. Dismissing it shows "Not authorized …" in the panel.
 - **With the per-unit whitelist**: the plugin generates
   `/etc/polkit-1/rules.d/49-services-hub.rules` allowing exactly the
-  registered system units — and only `start/stop/restart` and
-  `enable/disable` on them. Syncing asks for your password **once** per
-  change; after that those actions are passwordless.
+  registered system units **and their socket/timer companions** — and only
+  start/stop/restart and enable/disable on them. Those actions become
+  passwordless.
 
 The panel footer shows the whitelist state and has **Sync** / **Remove**
 buttons. The plugin offers to sync automatically once per shell session when
 you register the first system service or change the registry — dismissing the
-password prompt keeps the ask-your-password-every-time behaviour until you
-sync (no nagging within the session).
+password prompt keeps the ask-your-password behaviour until you sync (no
+nagging within the session).
 
-The whitelist file is regenerated with the signature of your current registry
-in a comment, so drift is detected and marked stale in the footer. Only units
-matching systemd's unit-name charset make it into the file.
+Sync/Remove themselves always ask for your password: they are root file
+writes (`pkexec`), and whitelisting `org.freedesktop.policykit.exec` would
+let any script run arbitrary commands as root — deliberately not done.
 
 ## Settings
 

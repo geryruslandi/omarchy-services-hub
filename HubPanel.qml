@@ -67,7 +67,7 @@ Item {
   readonly property string pluginId: "geryruslandi.services-hub"
   // Bumped with every behavioural change; logged on load so the journal
   // always shows whether the running panel is stale.
-  readonly property string buildStamp: "2026-10-25T20:52"
+  readonly property string buildStamp: "2026-10-25T21:10"
   readonly property string pluginDir: decodeURIComponent(String(Qt.resolvedUrl(".")).replace(/^file:\/\//, "")).replace(/\/$/, "")
   readonly property string statePath: Color.stateHome + "/omarchy/services-hub.json"
   readonly property string polkitCandidatePath: Color.stateHome + "/omarchy/services-hub-polkit.rules"
@@ -361,7 +361,12 @@ Item {
   property string chainScope: ""
 
   function systemctlArgs(scope, verb, unit) {
-    var argv = scope === "system" ? ["pkexec", "systemctl"] : ["systemctl", "--user"]
+    // System scope runs systemctl as the user: systemd's D-Bus call triggers
+    // the manage-units/manage-unit-files polkit check, which the generated
+    // whitelist covers. pkexec would sit in front with its own
+    // org.freedesktop.policykit.exec action, which the whitelist cannot and
+    // should not grant — that was why every action kept prompting.
+    var argv = scope === "system" ? ["systemctl"] : ["systemctl", "--user"]
     return argv.concat([verb, "--", unit])
   }
 
@@ -969,13 +974,13 @@ Item {
       } else if (Model.overflowed(exitCode, exitStatus)) {
         root.actionFailed = true
         root.actionStatus = Model.overflowText("systemctl " + root.busyVerb)
-      } else if (exitCode === 127 && exitStatus === 0) {
-        // pkexec: authentication failed or the dialog was dismissed.
-        root.actionFailed = true
-        root.actionStatus = "Not done — polkit authentication was dismissed."
       } else if (exitCode !== 0 || exitStatus !== 0) {
+        var err = String(actionStderr.text || "")
         root.actionFailed = true
-        root.actionStatus = Model.elide(actionStderr.text || (root.busyVerb + " " + name + " failed"))
+        if (/interactive authentication required|access denied|authentication is required/i.test(err))
+          root.actionStatus = "Not authorized — the password prompt was dismissed. Sync the polkit whitelist to make this passwordless."
+        else
+          root.actionStatus = Model.elide(err || (root.busyVerb + " " + name + " failed"))
       } else {
         root.actionFailed = false
         root.actionStatus = Model.doneLabel(root.busyVerb) + " " + name
@@ -1021,10 +1026,12 @@ Item {
         root.enableError = Model.actionTimeoutText(enableProcess.verb, root.detailsUnit)
       } else if (Model.overflowed(exitCode, exitStatus)) {
         root.enableError = Model.overflowText("systemctl " + enableProcess.verb)
-      } else if (exitCode === 127 && exitStatus === 0) {
-        root.enableError = "Not changed — polkit authentication was dismissed."
       } else if (exitCode !== 0 || exitStatus !== 0) {
-        root.enableError = Model.elide(enableStderr.text || "Could not change start at login")
+        var err = String(enableStderr.text || "")
+        if (/interactive authentication required|access denied|authentication is required/i.test(err))
+          root.enableError = "Not authorized — the password prompt was dismissed."
+        else
+          root.enableError = Model.elide(err || "Could not change start at login")
       }
       root.refreshEnableState()
       root.refresh()
