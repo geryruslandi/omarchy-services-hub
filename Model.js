@@ -619,7 +619,7 @@ function defaultState() {
     version: 1,
     registry: [],
     settings: { showInactive: true, hideAutostart: true, refreshIntervalSec: 5 },
-    polkit: { signature: "", syncedAt: "", declinedSessionOnly: false }
+    polkit: { signature: "", syncedAt: "", declinedSessionOnly: false, declinedSignature: "" }
   }
 }
 
@@ -645,19 +645,21 @@ function normalizeState(raw) {
     if (typeof p.signature === "string") state.polkit.signature = p.signature
     if (typeof p.syncedAt === "string") state.polkit.syncedAt = p.syncedAt
     if (typeof p.declinedSessionOnly === "boolean") state.polkit.declinedSessionOnly = p.declinedSessionOnly
+    if (typeof p.declinedSignature === "string") state.polkit.declinedSignature = p.declinedSignature
   }
   return state
 }
 
 // True when a sync would change something. `installed` is what polkit.sh
 // status reported: { present: true|false|null, signature } — null means
-// unreadable, where the panel trusts its own sync record.
+// "not checked yet" or "unreadable", where the panel trusts its own sync
+// record so the footer is correct before any status round-trip lands.
 function polkitNeedsSync(state, systemNames, installed) {
   if (systemUnitNames(state.registry).length === 0) return false
   var wanted = unitSetSignature(systemUnitNames(state.registry))
-  if (!installed) return true
-  if (installed.present === null)
-    return String(state.polkit.signature || "") !== wanted
+  var recorded = String(state.polkit.signature || "")
+  if (!installed) return recorded !== wanted
+  if (installed.present === null) return recorded !== wanted
   if (!installed.present) return true
   return String(installed.signature || "") !== wanted
 }

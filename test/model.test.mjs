@@ -458,7 +458,7 @@ test("defaultState has the documented defaults", () => {
     version: 1,
     registry: [],
     settings: { showInactive: true, hideAutostart: true, refreshIntervalSec: 5 },
-    polkit: { signature: "", syncedAt: "", declinedSessionOnly: false }
+    polkit: { signature: "", syncedAt: "", declinedSessionOnly: false, declinedSignature: "" }
   })
 })
 
@@ -470,7 +470,7 @@ test("normalizeState merges stored JSON, drops junk, clamps the interval", () =>
       version: 1,
       registry: [{ unit: "a.service", scope: "system" }],
       settings: { showInactive: false, hideAutostart: true, refreshIntervalSec: 2 },
-      polkit: { signature: "abc", syncedAt: "", declinedSessionOnly: true }
+      polkit: { signature: "abc", syncedAt: "", declinedSessionOnly: true, declinedSignature: "" }
     })
   same(M.normalizeState("not json"), M.defaultState())
   same(M.normalizeState(null), M.defaultState())
@@ -505,6 +505,10 @@ test("polkitNeedsSync: no system units means never; absent or drifted means yes;
 
   const synced = { registry: withSystem.registry, polkit: { signature: M.unitSetSignature(["c.service"]) } }
   assert.equal(M.polkitNeedsSync(synced, [], { present: null, signature: "" }), false)
+  // Unknown status (not checked yet) trusts the sync record, so the footer
+  // is correct immediately after a sync without waiting for a status run.
+  assert.equal(M.polkitNeedsSync(synced, [], null), false)
   const drifted = { registry: withSystem.registry, polkit: { signature: "old" } }
   assert.equal(M.polkitNeedsSync(drifted, [], { present: null, signature: "" }), true)
+  assert.equal(M.polkitNeedsSync(drifted, [], null), true)
 })

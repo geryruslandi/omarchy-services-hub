@@ -67,7 +67,7 @@ Item {
   readonly property string pluginId: "geryruslandi.services-hub"
   // Bumped with every behavioural change; logged on load so the journal
   // always shows whether the running panel is stale.
-  readonly property string buildStamp: "2026-10-25T21:10"
+  readonly property string buildStamp: "2026-10-25T21:50"
   readonly property string pluginDir: decodeURIComponent(String(Qt.resolvedUrl(".")).replace(/^file:\/\//, "")).replace(/\/$/, "")
   readonly property string statePath: Color.stateHome + "/omarchy/services-hub.json"
   readonly property string polkitCandidatePath: Color.stateHome + "/omarchy/services-hub-polkit.rules"
@@ -230,6 +230,10 @@ Item {
     if (!root.opened) return
     if (!root.polkitNeedsSync) return
     if (root.stateObj.polkit.declinedSessionOnly) return
+    // An explicit Remove (or a dismissed prompt) suppresses offers until the
+    // registry changes — otherwise the post-remove status refresh would
+    // immediately re-create the whitelist behind the user's back.
+    if (root.stateObj.polkit.declinedSignature === root.polkitSignature) return
     if (root.polkitAutoOffered) return
     root.polkitAutoOffered = true
     Quickshell.execDetached(["notify-send", "-a", "Services Hub", "Services Hub — polkit whitelist",
@@ -241,8 +245,13 @@ Item {
     var next = JSON.parse(JSON.stringify(root.stateObj))
     next.polkit.signature = ""
     next.polkit.syncedAt = ""
+    // Remember the opt-out for this registry shape: do not auto-offer a
+    // re-sync until a service is added or removed.
+    next.polkit.declinedSignature = root.polkitSignature
+    next.polkit.declinedSessionOnly = true
     root.stateObj = Model.normalizeState(next)
     root.persistState()
+    root.polkitInstalled = { present: false, signature: "" }
     root.actionStatus = "Polkit whitelist removed."
     root.actionFailed = false
     statusTimer.restart()
@@ -1195,6 +1204,8 @@ Item {
         } else {
           var next = JSON.parse(JSON.stringify(root.stateObj))
           next.polkit.declinedSessionOnly = true
+          // Dismissed prompt: suppress offers for this registry shape too.
+          next.polkit.declinedSignature = root.polkitSignature
           root.stateObj = Model.normalizeState(next)
           root.persistState()
           root.actionFailed = false
@@ -1210,6 +1221,9 @@ Item {
         n.polkit.syncedAt = now
         root.stateObj = Model.normalizeState(n)
         root.persistState()
+        // The rules file is written (polkit.sh printed ok): reflect it now
+        // instead of waiting for the status round-trip.
+        root.polkitInstalled = { present: true, signature: root.polkitSignature }
         root.actionStatus = "Polkit whitelist updated."
         root.actionFailed = false
         statusTimer.restart()
@@ -1501,19 +1515,20 @@ Item {
                 textFormat: Text.PlainText
                 Layout.fillWidth: true
                 text: {
+                  var services = Model.systemUnitNames(root.registry).length
+                  var at = String(root.stateObj.polkit.syncedAt || "")
+                  var clock = at.replace(/^\d{4}-\d{2}-\d{2}T/, "").replace(/:\d{2}$/, "")
                   if (root.polkitBusy) return "Polkit whitelist: working…"
+                  if (services === 0) return "Polkit whitelist: not needed yet"
                   if (root.polkitNeedsSync) {
-                    if (root.registry.length === 0 || root.polkitSignature === "")
-                      return "Polkit whitelist: not needed yet"
-                    return root.polkitInstalled && root.polkitInstalled.present
-                      ? "Polkit whitelist: stale — registry changed, sync to update"
-                      : "Polkit whitelist: not set up — sync to control system services without a password"
+                    if (root.polkitInstalled && root.polkitInstalled.present)
+                      return "Polkit whitelist: stale — registry changed, sync to update"
+                    return "Polkit whitelist: not set up — sync for passwordless control"
                   }
-                  if (root.polkitInstalled && root.polkitInstalled.present || root.polkitSignature === root.stateObj.polkit.signature)
-                    return "Polkit whitelist: " + root.polkitUnits.length + " units (services + sockets/timers) · synced " + (root.stateObj.polkit.syncedAt || "")
-                  return "Polkit whitelist: not set up"
+                  return "Polkit whitelist: " + services + " service" + (services === 1 ? "" : "s")
+                    + " + socket/timer companions" + (clock !== "" ? " · synced " + clock : "")
                 }
-                color: root.polkitNeedsSync && root.polkitSignature !== "" ? root.dim : root.dim
+                color: root.dim
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
                 elide: Text.ElideRight
