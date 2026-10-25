@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "geryruslandi.services-hub",
+  "name": "Services Hub",
+  "version": "0.1.0",
+  "author": "geryruslandi",
+  "license": "MIT",
+  "description": "Registered user and system services in one hub: start, stop, restart, start at login, RAM/VRAM, live logs, and an optional per-unit polkit whitelist. Bar-free; open it by searching \"Services hub\".",
+  "kinds": ["overlay", "service"],
+  "entryPoints": { "overlay": "HubPanel.qml", "service": "HubService.qml" },
+  "repository": ""
+}

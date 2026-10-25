@@ -1,0 +1,10 @@
+[Desktop Entry]
+# managed-by=geryruslandi.services-hub
+Type=Application
+Name=Services hub
+Comment=Start, stop and inspect your registered user and system services
+Exec=sh -c "if grep -q geryruslandi.services-hub $HOME/.config/omarchy/shell.json; then exec omarchy-shell shell toggle geryruslandi.services-hub; else sh $HOME/.config/omarchy/plugins/geryruslandi.services-hub/setup.sh clean 2>/dev/null; fi"
+Icon=system-run
+Keywords=services;systemd;systemctl;hub;daemon;
+Categories=System;
+Terminal=false
